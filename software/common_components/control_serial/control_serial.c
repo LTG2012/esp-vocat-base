@@ -129,15 +129,11 @@ static void uart_cmd_receive_task(void *arg)
                     continue;
                 }
                 
-                // Calculate rotation angle relative to initial position (90 degrees)
-                // diff_angle = value - 90 means:
-                //   - value = 90: diff_angle = 0 (no rotation, facing head)
-                //   - value = 120: diff_angle = 30 (rotate right 30 degrees)
-                //   - value = 60: diff_angle = -30 (rotate left 30 degrees)
-                float diff_angle = (float)value - 90.0f;
-                
-                // Calculate new absolute angle after rotation
-                float new_absolute_angle = s_base_absolute_angle + diff_angle;
+                // Treat the received value as the target angle in the 0-180 degree range.
+                // The center position is 90 degrees, so the motor only moves by the
+                // difference between the requested target and the tracked position.
+                float diff_angle = (float)value - s_base_absolute_angle;
+                float new_absolute_angle = (float)value;
                 
                 // Check if new absolute angle would be out of range (0-180 degrees)
                 if (new_absolute_angle < 0.0f || new_absolute_angle > 180.0f) {
@@ -149,7 +145,7 @@ static void uart_cmd_receive_task(void *arg)
                 ESP_LOGI(TAG, "Received sound source angle: %d, current absolute angle: %.1f, diff_angle: %.1f, new absolute angle: %.1f", 
                          value, s_base_absolute_angle, diff_angle, new_absolute_angle);
                 
-                // Execute angle control (rotate by diff_angle degrees)
+                // Execute angle control (rotate to the requested absolute target)
                 stepper_rotate_angle_with_accel((int16_t)diff_angle, STEPPER_SPEED_ULTRA_FAST);
                 vTaskDelay(pdMS_TO_TICKS(100));
                 stepper_motor_power_off();
