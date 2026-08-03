@@ -211,13 +211,18 @@ static void stepper_rotate_ccw_with_accel(int steps, int target_delay_us)
  * @param angle Rotation angle, positive for right (clockwise), negative for left (counterclockwise)
  * @param target_delay_us Target speed delay (microseconds), will automatically accelerate from slow speed to this speed at start
  * 
- * @note Half-step mode: 4128 steps = 360 degrees
+ * @note Half-step mode: 3096 steps = 360 degrees for the 1:48 gearbox
  * @note Uses linear acceleration/deceleration algorithm to ensure smooth start and stop
  */
 void stepper_rotate_angle_with_accel(float angle, int target_delay_us)
 {
-    // Half-step mode: 4128 steps = 360 degrees
-    int steps = (int)(angle * 4128.0 / 360.0 + 0.5);
+    // Enforce the motor's maximum speed limit.
+    if (target_delay_us < STEPPER_SPEED_ULTRA_FAST) {
+        target_delay_us = STEPPER_SPEED_ULTRA_FAST;
+    }
+
+    // Half-step mode: 3096 steps = 360 degrees for the 1:48 gearbox
+    int steps = (int)(angle * 3096.0 / 360.0 + 0.5);
     
     if (steps == 0) {
         ESP_LOGI(TAG, "Angle too small, no rotation needed");

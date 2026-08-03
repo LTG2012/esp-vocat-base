@@ -172,35 +172,35 @@ static void uart_cmd_receive_task(void *arg)
                 switch (action) {
                     case STEPPER_ACTION_SHAKE_HEAD:
                         ESP_LOGI(TAG, "Execute action: SHAKE_HEAD");
-                        stepper_shake_head(6.0, 2, 600);
+                        stepper_shake_head(6.0, 2, STEPPER_SPEED_NORMAL);
                         stepper_motor_power_off();
                         control_serial_send_action_complete();  // Send action complete notification
                         break;
                         
                     case STEPPER_ACTION_SHAKE_HEAD_DECAY:
                         ESP_LOGI(TAG, "Execute action: SHAKE_HEAD_DECAY");
-                        stepper_shake_head_decay(20.0, 0.8, 800);
+                        stepper_shake_head_decay(20.0, 0.8, STEPPER_SPEED_NORMAL);
                         stepper_motor_power_off();
                         control_serial_send_action_complete();  // Send action complete notification
                         break;
                         
                     case STEPPER_ACTION_LOOK_AROUND:
                         ESP_LOGI(TAG, "Execute action: LOOK_AROUND");
-                        stepper_look_around(35.0, 35.0, 10.0, 600, 600, 800);
+                        stepper_look_around(35.0, 35.0, 10.0, 600, STEPPER_SPEED_NORMAL, STEPPER_SPEED_NORMAL);
                         stepper_motor_power_off();
                         control_serial_send_action_complete();  // Send action complete notification
                         break;
                         
                     case STEPPER_ACTION_BEAT_SWING:  // action = 3: drum beat
                         ESP_LOGI(TAG, "Execute action: BEAT_SWING (drum beat)");
-                        stepper_beat_swing(20.0, 800);
+                        stepper_beat_swing(20.0, STEPPER_SPEED_NORMAL);
                         stepper_motor_power_off();
                         // control_serial_send_action_complete();  // Send action complete notification
                         break;
                         
                     case STEPPER_ACTION_CAT_NUZZLE:
                         ESP_LOGI(TAG, "Execute action: CAT_NUZZLE");
-                        stepper_cat_nuzzle(20, 3, 1500);
+                        stepper_cat_nuzzle(20, 3, STEPPER_SPEED_NORMAL);
                         stepper_motor_power_off();
                         control_serial_send_action_complete();  // Send action complete notification
                         break;

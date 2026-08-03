@@ -23,8 +23,8 @@ extern "C" {
  * @note Uses half-step driving mode for doubled precision and smoother motion
  * @note Smaller delay means faster speed
  */
-#define STEPPER_SPEED_ULTRA_FAST    600     /**< Ultra fast mode: 600μs/step (0.6ms) */
-#define STEPPER_SPEED_FAST          800     /**< Fast mode: 1000μs/step (1ms) */
+#define STEPPER_SPEED_ULTRA_FAST    1500    /**< Maximum speed: 1500μs/step (1.5ms) */
+#define STEPPER_SPEED_FAST          1500    /**< Fast mode: 1500μs/step (1.5ms) */
 #define STEPPER_SPEED_NORMAL        1500    /**< Normal mode: 1500μs/step (1.5ms) */
 #define STEPPER_SPEED_SLOW          2000    /**< Slow mode: 2000μs/step (2ms) */
 
