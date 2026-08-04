@@ -32,6 +32,7 @@ extern "C" {
 #define CMD_BASE_ANGLE_CONTROL      (0x01)          /**< Base angle control */
 #define CMD_BASE_ACTION_CONTROL     (0x02)          /**< Base action control */
 #define CMD_MAGNETIC_SWITCH_EVENT   (0x03)          /**< Magnetic slide switch event */
+#define CMD_BASE_RELATIVE_ANGLE_CONTROL (0x04)      /**< Relative base angle control */
 #define CMD_ACTION_COMPLETE         (0x02)          /**< Specific action execution complete */
 
 /* ========== Magnetic Switch Special Command Codes ========== */

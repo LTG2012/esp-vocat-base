@@ -154,6 +154,29 @@ static void uart_cmd_receive_task(void *arg)
                 s_base_absolute_angle = new_absolute_angle;
                 ESP_LOGI(TAG, "Base rotated to absolute angle: %.1f degrees", s_base_absolute_angle);
             }
+            else if (cmd == CMD_BASE_RELATIVE_ANGLE_CONTROL) {  // Relative base angle control
+                if (data_len != 3) {  // Should be: cmd(1) + signed delta(2) = 3 bytes
+                    ESP_LOGW(TAG, "Invalid data length for relative angle control: %d (expected 3)", data_len);
+                    continue;
+                }
+
+                int16_t delta_angle = (int16_t)((frame[5] << 8) | frame[6]);
+                float new_absolute_angle = s_base_absolute_angle + (float)delta_angle;
+                if (new_absolute_angle < 0.0f || new_absolute_angle > 180.0f) {
+                    ESP_LOGW(TAG, "Relative rotation rejected: current=%.1f, delta=%d, target=%.1f",
+                             s_base_absolute_angle, delta_angle, new_absolute_angle);
+                    continue;
+                }
+
+                ESP_LOGI(TAG, "Received relative angle: current=%.1f, delta=%d, target=%.1f",
+                         s_base_absolute_angle, delta_angle, new_absolute_angle);
+                stepper_rotate_angle_with_accel((float)delta_angle, STEPPER_SPEED_ULTRA_FAST);
+                vTaskDelay(pdMS_TO_TICKS(100));
+                stepper_motor_power_off();
+
+                s_base_absolute_angle = new_absolute_angle;
+                ESP_LOGI(TAG, "Base rotated to absolute angle: %.1f degrees", s_base_absolute_angle);
+            }
             else if (cmd == CMD_BASE_ACTION_CONTROL) {  // Base action control
                 if (data_len != 3) {  // Should be: cmd(1) + action(2) = 3 bytes
                     ESP_LOGW(TAG, "Invalid data length for action control: %d (expected 3)", data_len);
