@@ -71,7 +71,7 @@ extern "C" {
     
     /* Automatic calibration configuration */
     #define CALIBRATION_STABILITY_TIME_MS    (500)          /**< Time (ms) for value to be stable before recording calibration point */
-    #define CALIBRATION_VALUE_DIFF_THRESHOLD (100)          /**< Minimum difference between calibration values to consider them different */
+    #define CALIBRATION_VALUE_DIFF_THRESHOLD (70)           /**< Minimum difference between calibration values to consider them different */
     
 #elif defined(CONFIG_SENSOR_QMC6309)
     /* QMC6309 magnetometer specific configuration */
