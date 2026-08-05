@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,6 +35,7 @@ extern "C" {
 #define CMD_BASE_ACTION_CONTROL     (0x02)          /**< Base action control */
 #define CMD_MAGNETIC_SWITCH_EVENT   (0x03)          /**< Magnetic slide switch event */
 #define CMD_BASE_RELATIVE_ANGLE_CONTROL (0x04)      /**< Relative base angle control */
+#define CMD_MAGNETIC_MONITOR_CONTROL (0x05)         /**< Magnetic monitor stream control/data */
 #define CMD_ACTION_COMPLETE         (0x02)          /**< Specific action execution complete */
 
 /* ========== Magnetic Switch Special Command Codes ========== */
@@ -40,6 +43,12 @@ extern "C" {
 #define MAG_SWITCH_CALIB_START      (0x0081)        /**< Start calibration */
 #define MAG_SWITCH_CALIB_FIRST_DONE (0x0082)        /**< Second position calibration done, proceed to third action */
 #define MAG_SWITCH_CALIB_COMPLETE   (0x0083)        /**< Calibration complete */
+
+/* ========== Magnetic Monitor Commands ========== */
+#define MAGNETIC_MONITOR_PROTOCOL_VERSION (0x01)
+#define MAGNETIC_MONITOR_DISABLE          (0x0000)
+#define MAGNETIC_MONITOR_ENABLE           (0x0001)
+#define MAGNETIC_MONITOR_INTERVAL_MS      (100)
 
 /* ========== Action Complete Status Code ========== */
 #define ACTION_COMPLETE_CODE        (0x0010)        /**< Action complete code (16) */
@@ -111,12 +120,25 @@ esp_err_t control_serial_send_action_complete(void);
 esp_err_t control_serial_send_magnetic_switch_calibration_step(uint16_t step_code);
 
 /**
+ * @brief Send one magnetic monitor sample to the head unit.
+ *
+ * The frame payload contains protocol version, X/Y/Z raw values, filtered
+ * magnetic value, delta from the previous report, and position state.
+ */
+esp_err_t control_serial_send_magnetic_monitor_data(int16_t x, int16_t y, int16_t z,
+                                                    int16_t filtered_value, int16_t delta,
+                                                    uint8_t position);
+
+/**
  * @brief Start magnetic attachment detection task
  * 
  * @note This task periodically checks if ESP-VoCat is magnetically attached to the base
  *       and sends status notifications via UART
  */
 void control_serial_start_magnetic_detect_task(void);
+
+/** Start the optional magnetic monitor reporting task. */
+void control_serial_start_magnetic_monitor_task(void);
 
 /**
  * @brief Print magnetometer sensor data via UART

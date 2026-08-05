@@ -172,6 +172,7 @@ void app_main(void)
     boot_button_init();  // Initialize Boot button
     control_serial_init();
     control_serial_start_magnetic_detect_task();
+    control_serial_start_magnetic_monitor_task();
 
     xTaskCreate(base_calibration_task, "base_calibration_task", BASE_CALIBRATION_TASK_STACK_SIZE, NULL, 10, NULL);
     magnetic_slide_switch_start();

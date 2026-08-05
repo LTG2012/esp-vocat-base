@@ -63,6 +63,8 @@ typedef struct {
 static magnetometer_data_t s_mag_data = {0};  /**< Shared magnetometer data */
 static SemaphoreHandle_t s_mag_data_mutex = NULL;  /**< Mutex for protecting shared data */
 static SemaphoreHandle_t s_calibration_complete_sem = NULL;  /**< Semaphore to signal calibration completion */
+static volatile int16_t s_monitor_filtered_value = 0;
+static volatile bool s_monitor_filtered_valid = false;
 #endif
 
 /* ========== Linear Hall Sensor Related Functions ========== */
@@ -1318,6 +1320,8 @@ static void slide_switch_event_detect_task(void *arg)
                     sum += s_window[i];
                 }
                 int16_t average = sum / MAG_WINDOW_SIZE;
+                s_monitor_filtered_value = average;
+                s_monitor_filtered_valid = true;
                 
                 // ========== Normal Operation Mode ==========
                 
@@ -2131,6 +2135,47 @@ void magnetic_slide_switch_start(void)
 magnetic_slide_switch_event_t magnetic_slide_switch_get_event(void)
 {
     return s_slider_state;
+}
+
+bool magnetic_slide_switch_get_monitor_data(magnetic_slide_switch_monitor_data_t *data)
+{
+    if (data == NULL) {
+        return false;
+    }
+
+#if CONFIG_SENSOR_MAGNETOMETER
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t z = 0;
+    if (!s_monitor_filtered_valid || !get_magnetometer_data(&x, &y, &z)) {
+        return false;
+    }
+
+    const int16_t filtered_value = s_monitor_filtered_value;
+    const int16_t removed_distance = abs(filtered_value - s_calibrated_removed_center);
+    const int16_t up_distance = abs(filtered_value - s_calibrated_up_center);
+    const int16_t down_distance = abs(filtered_value - s_calibrated_down_center);
+
+    magnetic_slide_switch_position_t position = MAGNETIC_SLIDE_SWITCH_POSITION_UNKNOWN;
+    int16_t minimum_distance = removed_distance;
+    position = MAGNETIC_SLIDE_SWITCH_POSITION_REMOVED;
+    if (up_distance < minimum_distance) {
+        minimum_distance = up_distance;
+        position = MAGNETIC_SLIDE_SWITCH_POSITION_UP;
+    }
+    if (down_distance < minimum_distance) {
+        minimum_distance = down_distance;
+        position = MAGNETIC_SLIDE_SWITCH_POSITION_DOWN;
+    }
+    data->x = x;
+    data->y = y;
+    data->z = z;
+    data->filtered_value = filtered_value;
+    data->position = position;
+    return true;
+#else
+    return false;
+#endif
 }
 
 /**

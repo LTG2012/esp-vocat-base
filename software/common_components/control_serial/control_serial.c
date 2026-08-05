@@ -15,6 +15,7 @@
 #include "magnetic_slide_switch.h"
 
 static const char *TAG = "Control Serial";
+static volatile bool s_magnetic_monitor_enabled = false;
 
 /**
  * @brief UART command receive task
@@ -247,6 +248,23 @@ static void uart_cmd_receive_task(void *arg)
                     ESP_LOGW(TAG, "Unknown magnetic switch command: 0x%04X", mag_cmd);
                 }
             }
+            else if (cmd == CMD_MAGNETIC_MONITOR_CONTROL) {
+                if (data_len != 3) {
+                    ESP_LOGW(TAG, "Invalid data length for magnetic monitor command: %d (expected 3)", data_len);
+                    continue;
+                }
+
+                uint16_t monitor_cmd = (frame[5] << 8) | frame[6];
+                if (monitor_cmd == MAGNETIC_MONITOR_ENABLE) {
+                    s_magnetic_monitor_enabled = true;
+                    ESP_LOGI(TAG, "Magnetic monitor stream enabled");
+                } else if (monitor_cmd == MAGNETIC_MONITOR_DISABLE) {
+                    s_magnetic_monitor_enabled = false;
+                    ESP_LOGI(TAG, "Magnetic monitor stream disabled");
+                } else {
+                    ESP_LOGW(TAG, "Unknown magnetic monitor command: 0x%04X", monitor_cmd);
+                }
+            }
             else {
                 ESP_LOGW(TAG, "Unknown command code: 0x%02X, data_len: %d", cmd, data_len);
             }
@@ -456,6 +474,40 @@ void control_serial_start_magnetic_detect_task(void)
     ESP_LOGI(TAG, "Magnetic detection task created");
 }
 
+static void magnetic_monitor_task(void *arg)
+{
+    int16_t previous_filtered_value = 0;
+    bool has_previous_value = false;
+
+    while (1) {
+        if (!s_magnetic_monitor_enabled) {
+            has_previous_value = false;
+            vTaskDelay(pdMS_TO_TICKS(MAGNETIC_MONITOR_INTERVAL_MS));
+            continue;
+        }
+
+        magnetic_slide_switch_monitor_data_t monitor_data;
+        if (magnetic_slide_switch_get_monitor_data(&monitor_data)) {
+            const int16_t delta = has_previous_value ?
+                                  monitor_data.filtered_value - previous_filtered_value : 0;
+            control_serial_send_magnetic_monitor_data(monitor_data.x, monitor_data.y, monitor_data.z,
+                                                      monitor_data.filtered_value, delta,
+                                                      monitor_data.position);
+            previous_filtered_value = monitor_data.filtered_value;
+            has_previous_value = true;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(MAGNETIC_MONITOR_INTERVAL_MS));
+    }
+}
+
+void control_serial_start_magnetic_monitor_task(void)
+{
+    xTaskCreate(magnetic_monitor_task, "mag_monitor_task",
+                MAGNETIC_DETECT_TASK_STACK_SIZE, NULL, 4, NULL);
+    ESP_LOGI(TAG, "Magnetic monitor task created");
+}
+
 /**
  * @brief Send magnetic switch calibration step notification
  * 
@@ -505,6 +557,41 @@ esp_err_t control_serial_send_magnetic_switch_calibration_step(uint16_t step_cod
         ESP_LOGE(TAG, "Failed to send calibration step: sent=%d", sent);
         return ESP_FAIL;
     }
+}
+
+esp_err_t control_serial_send_magnetic_monitor_data(int16_t x, int16_t y, int16_t z,
+                                                    int16_t filtered_value, int16_t delta,
+                                                    uint8_t position)
+{
+    uint8_t tx_buffer[18];
+    tx_buffer[0] = UART_FRAME_HEAD_H;
+    tx_buffer[1] = UART_FRAME_HEAD_L;
+    tx_buffer[2] = 0x00;
+    tx_buffer[3] = 0x0D;
+    tx_buffer[4] = CMD_MAGNETIC_MONITOR_CONTROL;
+    tx_buffer[5] = MAGNETIC_MONITOR_PROTOCOL_VERSION;
+
+    const int16_t values[] = {x, y, z, filtered_value, delta};
+    int index = 6;
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+        tx_buffer[index++] = ((uint16_t)values[i] >> 8) & 0xFF;
+        tx_buffer[index++] = (uint16_t)values[i] & 0xFF;
+    }
+    tx_buffer[index++] = position;
+
+    uint8_t checksum = 0;
+    for (int i = 4; i < index; ++i) {
+        checksum += tx_buffer[i];
+    }
+    tx_buffer[index] = checksum;
+
+    const int sent = uart_write_bytes(ECHO_UART_PORT_NUM, tx_buffer, sizeof(tx_buffer));
+    if (sent == sizeof(tx_buffer)) {
+        return ESP_OK;
+    }
+
+    ESP_LOGE(TAG, "Failed to send magnetic monitor data: sent=%d", sent);
+    return ESP_FAIL;
 }
 
 /**

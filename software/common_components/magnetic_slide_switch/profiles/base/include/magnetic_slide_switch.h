@@ -131,6 +131,23 @@ typedef enum {
     MAGNETIC_SLIDE_SWITCH_EVENT_PAIRING_CANCELLED = 11,     /**< Pairing cancelled event */
 } magnetic_slide_switch_event_t;
 
+/** Current slider position derived from the filtered magnetic field value. */
+typedef enum {
+    MAGNETIC_SLIDE_SWITCH_POSITION_UNKNOWN = 0,
+    MAGNETIC_SLIDE_SWITCH_POSITION_REMOVED,
+    MAGNETIC_SLIDE_SWITCH_POSITION_UP,
+    MAGNETIC_SLIDE_SWITCH_POSITION_DOWN,
+} magnetic_slide_switch_position_t;
+
+/** Snapshot used by the optional UART magnetic monitor. */
+typedef struct {
+    int16_t x;
+    int16_t y;
+    int16_t z;
+    int16_t filtered_value;
+    magnetic_slide_switch_position_t position;
+} magnetic_slide_switch_monitor_data_t;
+
 /* ========== Function Declarations ========== */
 
 /**
@@ -147,6 +164,13 @@ void magnetic_slide_switch_start(void);
  * @return magnetic_slide_switch_event_t Current event type
  */
 magnetic_slide_switch_event_t magnetic_slide_switch_get_event(void);
+
+/**
+ * @brief Get the latest magnetic sensor snapshot for diagnostics.
+ *
+ * @return true when the sensor and the slide-switch filter both have valid data.
+ */
+bool magnetic_slide_switch_get_monitor_data(magnetic_slide_switch_monitor_data_t *data);
 
 /**
  * @brief Trigger recalibration (no restart needed, takes effect immediately)
