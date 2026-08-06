@@ -16,6 +16,9 @@
 
 static const char *TAG = "Control Serial";
 static volatile bool s_magnetic_monitor_enabled = false;
+static control_serial_magnetic_calibration_status_t s_calibration_status = {0};
+static bool s_calibration_status_valid = false;
+static portMUX_TYPE s_calibration_status_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /**
  * @brief UART command receive task
@@ -506,6 +509,105 @@ void control_serial_start_magnetic_monitor_task(void)
     xTaskCreate(magnetic_monitor_task, "mag_monitor_task",
                 MAGNETIC_DETECT_TASK_STACK_SIZE, NULL, 4, NULL);
     ESP_LOGI(TAG, "Magnetic monitor task created");
+}
+
+void control_serial_update_magnetic_calibration_status(
+    const control_serial_magnetic_calibration_status_t *status)
+{
+    if (status == NULL) {
+        return;
+    }
+
+    portENTER_CRITICAL(&s_calibration_status_lock);
+    s_calibration_status = *status;
+    s_calibration_status_valid = true;
+    portEXIT_CRITICAL(&s_calibration_status_lock);
+}
+
+void control_serial_clear_magnetic_calibration_status(void)
+{
+    portENTER_CRITICAL(&s_calibration_status_lock);
+    s_calibration_status_valid = false;
+    portEXIT_CRITICAL(&s_calibration_status_lock);
+}
+
+static esp_err_t control_serial_send_magnetic_calibration_status(
+    const control_serial_magnetic_calibration_status_t *status, int16_t delta)
+{
+    uint8_t tx_buffer[31];
+    tx_buffer[0] = UART_FRAME_HEAD_H;
+    tx_buffer[1] = UART_FRAME_HEAD_L;
+    tx_buffer[2] = 0x00;
+    tx_buffer[3] = 0x1A;
+    tx_buffer[4] = CMD_MAGNETIC_CALIBRATION_STATUS;
+    tx_buffer[5] = MAGNETIC_CALIBRATION_PROTOCOL_VERSION;
+    tx_buffer[6] = status->state;
+    tx_buffer[7] = status->flags;
+
+    const int16_t values[] = {
+        status->filtered_value,
+        delta,
+        status->variation,
+        (int16_t)status->stable_elapsed_ms,
+        (int16_t)status->stable_required_ms,
+        status->diff_first,
+        status->diff_second,
+        (int16_t)status->min_difference,
+        status->point_first,
+        status->point_second,
+        status->point_third,
+    };
+
+    int index = 8;
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+        tx_buffer[index++] = ((uint16_t)values[i] >> 8) & 0xFF;
+        tx_buffer[index++] = (uint16_t)values[i] & 0xFF;
+    }
+
+    uint8_t checksum = 0;
+    for (int i = 4; i < index; ++i) {
+        checksum += tx_buffer[i];
+    }
+    tx_buffer[index] = checksum;
+
+    const int sent = uart_write_bytes(ECHO_UART_PORT_NUM, tx_buffer, sizeof(tx_buffer));
+    return sent == sizeof(tx_buffer) ? ESP_OK : ESP_FAIL;
+}
+
+static void magnetic_calibration_status_task(void *arg)
+{
+    int16_t previous_filtered_value = 0;
+    bool has_previous_value = false;
+
+    while (1) {
+        control_serial_magnetic_calibration_status_t status;
+        bool status_valid;
+
+        portENTER_CRITICAL(&s_calibration_status_lock);
+        status = s_calibration_status;
+        status_valid = s_calibration_status_valid;
+        portEXIT_CRITICAL(&s_calibration_status_lock);
+
+        if (s_magnetic_monitor_enabled && status_valid) {
+            const int16_t delta = has_previous_value ?
+                                  status.filtered_value - previous_filtered_value : 0;
+            if (control_serial_send_magnetic_calibration_status(&status, delta) == ESP_OK) {
+                previous_filtered_value = status.filtered_value;
+                has_previous_value = true;
+            }
+        } else {
+            has_previous_value = false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(MAGNETIC_MONITOR_INTERVAL_MS));
+    }
+}
+
+void control_serial_start_magnetic_calibration_status_task(void)
+{
+    xTaskCreate(magnetic_calibration_status_task, "mag_calib_status_task",
+                MAGNETIC_DETECT_TASK_STACK_SIZE, NULL, 4, NULL);
+    ESP_LOGI(TAG, "Magnetic calibration diagnostic task created");
 }
 
 /**

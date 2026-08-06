@@ -565,6 +565,65 @@ static int16_t s_calibrated_down_center = MAG_STATE_DOWN_CENTER;
 
 /** Recalibration flag (global variable) */
 static volatile bool s_request_recalibration = false;
+static volatile bool s_calibration_in_progress = false;
+
+static void report_slide_switch_event(magnetic_slide_switch_event_t event)
+{
+    if (!s_calibration_in_progress) {
+        control_serial_send_magnetic_switch_event(event);
+    }
+}
+
+static void update_calibration_diagnostic(calibration_state_t state,
+                                          const int16_t values[3],
+                                          int16_t current_value,
+                                          TickType_t stable_start_time,
+                                          int16_t stable_value)
+{
+    control_serial_magnetic_calibration_status_t status = {
+        .state = state,
+        .flags = MAGNETIC_CALIBRATION_FLAG_SENSOR_VALID,
+        .filtered_value = current_value,
+        .variation = abs(current_value - stable_value),
+        .stable_required_ms = CALIBRATION_STABILITY_TIME_MS,
+        .min_difference = CALIBRATION_VALUE_DIFF_THRESHOLD,
+        .point_first = values[0],
+        .point_second = values[1],
+        .point_third = values[2],
+    };
+
+    if (state == CALIBRATION_COMPLETED) {
+        status.flags |= MAGNETIC_CALIBRATION_FLAG_COMPLETE |
+                        MAGNETIC_CALIBRATION_FLAG_DIFF1_OK |
+                        MAGNETIC_CALIBRATION_FLAG_DIFF2_OK;
+    } else {
+        status.flags |= MAGNETIC_CALIBRATION_FLAG_ACTIVE;
+    }
+
+    if (stable_start_time != 0) {
+        status.stable_elapsed_ms = (uint16_t)((xTaskGetTickCount() - stable_start_time) *
+                                              portTICK_PERIOD_MS);
+        if (status.variation < 10) {
+            status.flags |= MAGNETIC_CALIBRATION_FLAG_STABLE;
+        }
+    }
+
+    if (values[0] != 0) {
+        status.diff_first = abs(current_value - values[0]);
+        if (status.diff_first > CALIBRATION_VALUE_DIFF_THRESHOLD) {
+            status.flags |= MAGNETIC_CALIBRATION_FLAG_DIFF1_OK;
+        }
+    }
+
+    if (values[1] != 0) {
+        status.diff_second = abs(current_value - values[1]);
+        if (status.diff_second > CALIBRATION_VALUE_DIFF_THRESHOLD) {
+            status.flags |= MAGNETIC_CALIBRATION_FLAG_DIFF2_OK;
+        }
+    }
+
+    control_serial_update_magnetic_calibration_status(&status);
+}
 
 /**
  * @brief Save calibration data to NVS
@@ -905,6 +964,7 @@ static void magnetometer_calibration_task(void *arg)
             ESP_LOGI(TAG, "========== Re-calibration Requested ==========");
             ESP_LOGI(TAG, "Starting automatic recalibration...");
             control_serial_send_magnetic_switch_calibration_step(MAG_SWITCH_CALIB_START);
+            control_serial_clear_magnetic_calibration_status();
             
             // Reset calibration state
             s_calibration_state = CALIBRATION_DETECTING_FIRST;
@@ -913,6 +973,8 @@ static void magnetometer_calibration_task(void *arg)
             s_calibration_temp_values[1] = 0;
             s_calibration_temp_values[2] = 0;
             s_first_completion_signaled = false;  // Reset signal flag for recalibration
+            s_calibration_in_progress = true;
+            update_calibration_diagnostic(s_calibration_state, s_calibration_temp_values, 0, 0, 0);
             
             // Reset window
             s_window_filled = 0;
@@ -1207,6 +1269,12 @@ static void magnetometer_calibration_task(void *arg)
                     default:
                         break;
                 }
+
+                update_calibration_diagnostic(s_calibration_state, s_calibration_temp_values,
+                                              average, s_stable_start_time, s_stable_value);
+                if (s_calibration_state == CALIBRATION_COMPLETED) {
+                    s_calibration_in_progress = false;
+                }
                 
                 // If calibration is completed (either loaded from NVS or finished), signal and wait for recalibration
                 if (s_calibration_state == CALIBRATION_COMPLETED) {
@@ -1346,7 +1414,7 @@ static void slide_switch_event_detect_task(void *arg)
                         s_slider_state = MAGNETIC_SLIDE_SWITCH_EVENT_SLIDE_UP;
                         ESP_LOGI(TAG, "Initial position detected: SLIDE_UP (average: %d, UP range: [%d-%d])", 
                                  average, calibrated_up_min, calibrated_up_max);
-                        control_serial_send_magnetic_switch_event(s_slider_state);
+                        report_slide_switch_event(s_slider_state);
                         s_initial_position_detected = true;
                     }
                     // Check if average falls within DOWN range
@@ -1355,7 +1423,7 @@ static void slide_switch_event_detect_task(void *arg)
                         s_slider_state = MAGNETIC_SLIDE_SWITCH_EVENT_SLIDE_DOWN;
                         ESP_LOGI(TAG, "Initial position detected: SLIDE_DOWN (average: %d, DOWN range: [%d-%d])", 
                                  average, calibrated_down_min, calibrated_down_max);
-                        control_serial_send_magnetic_switch_event(s_slider_state);
+                        report_slide_switch_event(s_slider_state);
                         s_initial_position_detected = true;
                     }
                     // If average is in REMOVED range or unknown, wait for next reading
@@ -1456,7 +1524,7 @@ static void slide_switch_event_detect_task(void *arg)
                                 // Send event if detected
                                 if (event != MAGNETIC_SLIDE_SWITCH_EVENT_INIT) {
                                     s_slider_state = event;
-                                    control_serial_send_magnetic_switch_event(event);
+                                    report_slide_switch_event(event);
                                     
                                     // Enable "the fish is attached" detection after REMOVE_FROM_UP or REMOVE_FROM_DOWN event
                                     if (event == MAGNETIC_SLIDE_SWITCH_EVENT_REMOVE_FROM_UP || 
@@ -1614,7 +1682,7 @@ static void slide_switch_event_detect_task(void *arg)
                                              mag_y, s_click_initial_y, s_y_drop_min_value, diff_y_from_initial, mag_z, s_calibrated_down_center);
                                     
                                     // Send event notification
-                                    control_serial_send_magnetic_switch_event(s_slider_state);
+                                    report_slide_switch_event(s_slider_state);
                                     
                                     // Mark as triggered to prevent multiple triggers
                                     s_y_drop_click_triggered = true;
@@ -1790,7 +1858,7 @@ static void slide_switch_event_detect_task(void *arg)
                                          s_slope_change_count_x, s_slope_change_count_y, (unsigned long)elapsed_ms);
                                 
                                 // Send event notification
-                                control_serial_send_magnetic_switch_event(s_slider_state);
+                                report_slide_switch_event(s_slider_state);
                                 
                                 // Reset to idle state
                                 s_click_state = CLICK_STATE_IDLE;
@@ -1862,7 +1930,7 @@ static void slide_switch_event_detect_task(void *arg)
                                                  average, s_calibrated_removed_center, drop_from_removed, MAG_PAIRING_DROP_THRESHOLD);
                                         
                                         // Send event notification
-                                        control_serial_send_magnetic_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_PAIRING_CANCELLED);
+                                        report_slide_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_PAIRING_CANCELLED);
                                         
                                         // Reset pairing state to allow new detection cycle
                                         s_pairing_event_triggered = false;
@@ -1910,7 +1978,7 @@ static void slide_switch_event_detect_task(void *arg)
                                              average, s_calibrated_removed_center, drop_from_removed, MAG_PAIRING_DROP_THRESHOLD);
                                     
                                     // Send event notification
-                                    control_serial_send_magnetic_switch_event(s_slider_state);
+                                    report_slide_switch_event(s_slider_state);
                                     
                                     // Mark as triggered to avoid repeated triggers
                                     s_pairing_event_triggered = true;
@@ -1983,7 +2051,7 @@ static void slide_switch_event_detect_task(void *arg)
                                              log_diff_from_removed, FISH_FROM_UP_MIN_DIFF);
                                     
                                     // Send event notification
-                                    control_serial_send_magnetic_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_FISH_DETACHED);
+                                    report_slide_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_FISH_DETACHED);
                                     
                                     // Reset fish attached state to allow new detection cycle
                                     s_fish_state_detected = false;
@@ -2036,7 +2104,7 @@ static void slide_switch_event_detect_task(void *arg)
                                 ESP_LOGI(TAG, "Fish attached (from UP position) detected (average: %d, REMOVED: %d, diff_from_removed: %d [%d-%d])", 
                                          average, s_calibrated_removed_center, 
                                          log_diff_from_removed, FISH_FROM_UP_MIN_DIFF, FISH_FROM_UP_MAX_DIFF);
-                                control_serial_send_magnetic_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_FISH_ATTACHED);
+                                report_slide_switch_event(MAGNETIC_SLIDE_SWITCH_EVENT_FISH_ATTACHED);
                                 s_fish_state_detected = true;
                                 
                                 // Keep detection enabled, but reset counters for next detection cycle

@@ -36,6 +36,7 @@ extern "C" {
 #define CMD_MAGNETIC_SWITCH_EVENT   (0x03)          /**< Magnetic slide switch event */
 #define CMD_BASE_RELATIVE_ANGLE_CONTROL (0x04)      /**< Relative base angle control */
 #define CMD_MAGNETIC_MONITOR_CONTROL (0x05)         /**< Magnetic monitor stream control/data */
+#define CMD_MAGNETIC_CALIBRATION_STATUS (0x07)      /**< Magnetic calibration diagnostic data */
 #define CMD_ACTION_COMPLETE         (0x02)          /**< Specific action execution complete */
 
 /* ========== Magnetic Switch Special Command Codes ========== */
@@ -49,6 +50,30 @@ extern "C" {
 #define MAGNETIC_MONITOR_DISABLE          (0x0000)
 #define MAGNETIC_MONITOR_ENABLE           (0x0001)
 #define MAGNETIC_MONITOR_INTERVAL_MS      (100)
+
+/* ========== Magnetic Calibration Diagnostic Protocol ========== */
+#define MAGNETIC_CALIBRATION_PROTOCOL_VERSION (0x01)
+#define MAGNETIC_CALIBRATION_FLAG_ACTIVE       (1 << 0)
+#define MAGNETIC_CALIBRATION_FLAG_SENSOR_VALID (1 << 1)
+#define MAGNETIC_CALIBRATION_FLAG_STABLE       (1 << 2)
+#define MAGNETIC_CALIBRATION_FLAG_DIFF1_OK     (1 << 3)
+#define MAGNETIC_CALIBRATION_FLAG_DIFF2_OK     (1 << 4)
+#define MAGNETIC_CALIBRATION_FLAG_COMPLETE     (1 << 5)
+
+typedef struct {
+    uint8_t state;
+    uint8_t flags;
+    int16_t filtered_value;
+    int16_t variation;
+    uint16_t stable_elapsed_ms;
+    uint16_t stable_required_ms;
+    int16_t diff_first;
+    int16_t diff_second;
+    uint16_t min_difference;
+    int16_t point_first;
+    int16_t point_second;
+    int16_t point_third;
+} control_serial_magnetic_calibration_status_t;
 
 /* ========== Action Complete Status Code ========== */
 #define ACTION_COMPLETE_CODE        (0x0010)        /**< Action complete code (16) */
@@ -139,6 +164,21 @@ void control_serial_start_magnetic_detect_task(void);
 
 /** Start the optional magnetic monitor reporting task. */
 void control_serial_start_magnetic_monitor_task(void);
+
+/**
+ * @brief Update the latest magnetic calibration diagnostic snapshot.
+ *
+ * The serial module reports this snapshot at the magnetic monitor interval
+ * while the diagnostic stream is enabled.
+ */
+void control_serial_update_magnetic_calibration_status(
+    const control_serial_magnetic_calibration_status_t *status);
+
+/** Clear the pending magnetic calibration diagnostic snapshot. */
+void control_serial_clear_magnetic_calibration_status(void);
+
+/** Start the magnetic calibration diagnostic reporting task. */
+void control_serial_start_magnetic_calibration_status_task(void);
 
 /**
  * @brief Print magnetometer sensor data via UART

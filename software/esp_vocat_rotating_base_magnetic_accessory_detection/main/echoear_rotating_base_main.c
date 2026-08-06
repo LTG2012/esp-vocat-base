@@ -191,6 +191,7 @@ void app_main(void)
     control_serial_init();
     control_serial_start_magnetic_detect_task();
     control_serial_start_magnetic_monitor_task();
+    control_serial_start_magnetic_calibration_status_task();
 
 #if !defined(MAG_SW_PROFILE_BASE)
     // Register magnetic slide switch event callback before starting the switch
