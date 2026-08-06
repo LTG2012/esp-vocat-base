@@ -960,7 +960,7 @@ static void magnetometer_calibration_task(void *arg)
     
     while (1) {
         // Check if recalibration is needed
-        if (s_request_recalibration && s_calibration_state == CALIBRATION_COMPLETED) {
+        if (s_request_recalibration) {
             ESP_LOGI(TAG, "========== Re-calibration Requested ==========");
             ESP_LOGI(TAG, "Starting automatic recalibration...");
             control_serial_send_magnetic_switch_calibration_step(MAG_SWITCH_CALIB_START);
