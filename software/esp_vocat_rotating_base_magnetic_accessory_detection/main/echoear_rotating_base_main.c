@@ -63,6 +63,7 @@ static void boot_button_event_cb(void *arg, void *data)
  * 
  * @note This callback receives events from the magnetic slide switch and sends them via UART
  */
+#if !defined(MAG_SW_PROFILE_BASE)
 static void magnetic_slide_switch_event_cb(magnetic_slide_switch_event_t event)
 {
     // Send event to serial port
@@ -71,6 +72,7 @@ static void magnetic_slide_switch_event_cb(magnetic_slide_switch_event_t event)
         ESP_LOGW(TAG, "Failed to send magnetic switch event: %d", event);
     }
 }
+#endif
 
 /**
  * @brief Initialize base angle limit switch
@@ -188,7 +190,9 @@ void app_main(void)
     boot_button_init();  // Initialize Boot button
     control_serial_init();
     control_serial_start_magnetic_detect_task();
+    control_serial_start_magnetic_monitor_task();
 
+#if !defined(MAG_SW_PROFILE_BASE)
     // Register magnetic slide switch event callback before starting the switch
     ret = magnetic_slide_switch_register_callback(magnetic_slide_switch_event_cb);
     if (ret != ESP_OK) {
@@ -196,6 +200,9 @@ void app_main(void)
     } else {
         ESP_LOGI(TAG, "Magnetic slide switch event callback registered");
     }
+#else
+    ESP_LOGI(TAG, "Base magnetic slide switch profile sends events directly");
+#endif
 
     xTaskCreate(base_calibration_task, "base_calibration_task", BASE_CALIBRATION_TASK_STACK_SIZE, NULL, 10, NULL);
     magnetic_slide_switch_start();

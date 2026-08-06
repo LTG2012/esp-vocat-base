@@ -110,6 +110,9 @@ extern "C" {
     
 #endif  // CONFIG_SENSOR_BMM150 / CONFIG_SENSOR_QMC6309
 
+/* A position must remain stable long enough before it becomes the next action source. */
+#define MAG_POSITION_STABLE_TIME_MS         (200)
+
 #endif  // CONFIG_SENSOR_LINEAR_HALL / CONFIG_SENSOR_MAGNETOMETER
 
 /* ========== Magnetic Slide Switch Event Types ========== */

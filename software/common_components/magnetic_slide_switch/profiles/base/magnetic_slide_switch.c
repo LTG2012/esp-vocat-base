@@ -1393,6 +1393,7 @@ static void slide_switch_event_detect_task(void *arg)
                 static int16_t s_candidate_center = 0;
                 static mag_position_t s_candidate_position = MAG_POSITION_UNKNOWN;
                 static uint8_t s_stable_count = 0;
+                static TickType_t s_candidate_start_time = 0;
                 
                 // Check if average is stable near current center (within threshold)
                 const int16_t CENTER_STABILITY_THRESHOLD = MAG_STATE_REMOVED_OFFSET;  // Use same threshold as position detection
@@ -1405,7 +1406,10 @@ static void slide_switch_event_detect_task(void *arg)
                         s_stable_count++;
                         
                         // Check if stable enough to confirm position change
-                        if (s_stable_count >= MAG_STABLE_THRESHOLD) {
+                        TickType_t current_time = xTaskGetTickCount();
+                        uint32_t stable_duration_ms = (current_time - s_candidate_start_time) * portTICK_PERIOD_MS;
+                        if (s_stable_count >= MAG_STABLE_THRESHOLD &&
+                            stable_duration_ms >= MAG_POSITION_STABLE_TIME_MS) {
                             // Position is stable, check if it's different from last stable position
                             if (s_last_stable_position != current_center_position && s_last_stable_position != MAG_POSITION_UNKNOWN) {
                                 // Position changed, trigger event based on center value transition
@@ -1483,12 +1487,14 @@ static void slide_switch_event_detect_task(void *arg)
                         s_candidate_center = current_center;
                         s_candidate_position = current_center_position;
                         s_stable_count = 1;
+                        s_candidate_start_time = xTaskGetTickCount();
                     }
                 } else {
                     // Not near any center, reset candidate
                     s_candidate_center = 0;
                     s_candidate_position = MAG_POSITION_UNKNOWN;
                     s_stable_count = 0;
+                    s_candidate_start_time = 0;
                 }
                 
                 // 4. Single click detection - based on slope direction change count or Y axis drop threshold
